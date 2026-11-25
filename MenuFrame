@@ -1,0 +1,226 @@
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.IOException;
+import java.net.URL;
+import javax.imageio.ImageIO;
+import javax.sound.sampled.AudioInputStream;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.Clip;
+import javax.sound.sampled.FloatControl;
+import javax.sound.sampled.LineUnavailableException;
+import javax.sound.sampled.UnsupportedAudioFileException;
+import javax.swing.*;
+
+
+public class MenuFrame extends JFrame implements ActionListener {
+
+    // Variables for buttons and background 
+    private final JButton btn4LetterWords;
+    private final JButton btn5LetterWords;
+    private final JButton btn6LetterWords;
+    private JButton btnTutorial;
+    private final JButton btnExit;
+
+    private Font loadPixelFont(float size) {
+        try {
+            java.io.InputStream is = getClass().getResourceAsStream(
+                "/MegamaxJonathanToo-YqOq2.ttf"
+            );
+
+            if (is == null) {
+            throw new IOException("Pixel font file not found!");
+        }
+
+            Font pixelFont = Font.createFont(Font.TRUETYPE_FONT, is);
+            is.close();
+
+            return pixelFont.deriveFont(size);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new Font("Arial", Font.BOLD, (int) size);
+        }
+    }
+
+
+    private Image backgroundImage;
+    private Clip musicClip;
+    private static final String MUSIC_FILE = "/MUSICWORDSCAPES.wav";
+
+    // Our Window frame for our application
+public MenuFrame() {
+    setTitle("WORDSCAPES");
+    setSize(600, 700);
+    setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+    setLocationRelativeTo(null);
+    setResizable(false);
+
+    //Background Image of our MenuFrame
+    final ImageIcon image = new ImageIcon("1327.jpg");
+    setIconImage(image.getImage());
+
+    try {
+            backgroundImage = ImageIO.read(getClass().getResource("/Design.png"));
+        } catch (IOException e) {
+        System.err.println("Unable to load menu background image: " + e.getMessage());
+        }
+     
+
+ 
+    JPanel panel = new JPanel(new BorderLayout()) {
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            if (backgroundImage != null) {
+                g.drawImage(backgroundImage, 0, 0, getWidth(), getHeight(), this);
+            }
+        }
+    };
+    panel.setOpaque(false);
+    
+    // Title Label of our MenuFrame
+    JLabel titleLabel = new JLabel("WORDSCAPES", SwingConstants.CENTER);
+    titleLabel.setFont(loadPixelFont(50f));
+    titleLabel.setForeground(new Color(23, 54, 93));
+    titleLabel.setBorder(BorderFactory.createEmptyBorder(40, 0, 30, 0));
+    panel.add(titleLabel, BorderLayout.NORTH);
+
+    JPanel centerPanel = new JPanel();
+    centerPanel.setOpaque(false);
+    centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.Y_AXIS));
+    centerPanel.setOpaque(false);
+
+    // Our category buttons
+    btn4LetterWords = createMenuButton("4 LETTER WORDS");
+    btn5LetterWords = createMenuButton("5 LETTER WORDS");
+    btn6LetterWords = createMenuButton("6 LETTER WORDS");
+    btnTutorial = createMenuButton("TUTORIAL");
+
+        // The Dimension and spacing of each category
+        centerPanel.add(Box.createVerticalGlue());
+        centerPanel.add(btn4LetterWords);
+        centerPanel.add(Box.createRigidArea(new Dimension(0, 18)));
+        centerPanel.add(btn5LetterWords);
+        centerPanel.add(Box.createRigidArea(new Dimension(0, 18)));
+        centerPanel.add(btn6LetterWords);
+        centerPanel.add(Box.createVerticalGlue());
+
+        panel.add(centerPanel, BorderLayout.CENTER);
+
+        JPanel southPanel = new JPanel();
+        southPanel.setOpaque(false);
+        southPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 15, 0));
+        southPanel.setOpaque(false);
+
+        btnTutorial = new JButton("TUTORIAL");
+        btnTutorial.setPreferredSize(new Dimension(120, 36));
+        btnTutorial.setFont(new Font("Arial", Font.BOLD, 14));
+        btnTutorial.setBackground(Color.BLUE);
+        btnTutorial.setForeground(Color.WHITE);
+        btnTutorial.setBorderPainted(false);
+        btnTutorial.setFocusPainted(false);
+        btnTutorial.addActionListener(e -> actionPerformed(e));
+        btnTutorial.setAlignmentX(CENTER_ALIGNMENT);
+
+        // Exit button to close the app
+        btnExit = new JButton("EXIT");
+        btnExit.setPreferredSize(new Dimension(120, 36));
+        btnExit.setFont(new Font("Arial", Font.BOLD, 14));
+        btnExit.setBackground(Color.RED);
+        btnExit.setForeground(Color.WHITE);
+        btnExit.setBorderPainted(false);
+        btnExit.setFocusPainted(false);
+        btnExit.addActionListener(e -> actionPerformed(e));
+        btnExit.setAlignmentX(CENTER_ALIGNMENT);
+
+        southPanel.add(btnTutorial);
+        southPanel.add(Box.createRigidArea(new Dimension(0, 8)));
+        southPanel.add(btnExit);
+        southPanel.setLayout(new BoxLayout(southPanel, BoxLayout.Y_AXIS));
+        panel.add(southPanel, BorderLayout.SOUTH);
+
+        add(panel);
+
+        playMusic(0.5f); // Set volume to 50%
+    }
+
+    private void playMusic(float volume) {
+        try {
+            URL url = getClass().getResource(MUSIC_FILE);
+            if (url == null) {
+                System.err.println("Music file not found: " + MUSIC_FILE);
+                return;
+            }
+
+            AudioInputStream audio = AudioSystem.getAudioInputStream(url);
+            musicClip = AudioSystem.getClip();
+            musicClip.open(audio);
+            if (musicClip.isControlSupported(FloatControl.Type.MASTER_GAIN)) {
+                FloatControl gainControl = (FloatControl) musicClip.getControl(FloatControl.Type.MASTER_GAIN);
+                float dB = (float) (20 * Math.log10(volume));
+                gainControl.setValue(dB);
+            } 
+            musicClip.loop(Clip.LOOP_CONTINUOUSLY);
+
+        } catch (LineUnavailableException | IOException | UnsupportedAudioFileException e) {
+    e.printStackTrace();
+}
+                  
+    }
+
+    private void stopMusic() {
+        if (musicClip != null && musicClip.isRunning()) {
+            musicClip.stop();
+            musicClip.close();
+        }
+    }
+
+
+        // Method to create buttons for the menuframe
+        private JButton createMenuButton(String text) {
+            JButton button = new JButton(text);
+            button.setPreferredSize(new Dimension(260, 56));
+            button.setMaximumSize(new Dimension(260, 56));
+            button.setFont(new Font("Arial", Font.PLAIN, 22));
+            button.setAlignmentX(Component.CENTER_ALIGNMENT);
+            button.addActionListener(e -> actionPerformed(e));
+            return button;
+    }
+
+        // Method to handle the clicking actions of the buttons for the menuframe
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            if (e.getSource() == btnTutorial) {
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Welcome to WordScapes!\n\n"
+                        + "1. Choose a category: 4, 5, or 6 letter words.\n"
+                        + "2. You will have 6 attempts to guess the word.\n"
+                        + "3. After each guess, you will receive feedback:\n"
+                        + "   - Green tile: Correct letter in the correct position.\n"
+                        + "   - Yellow tile: Correct letter in the wrong position.\n"
+                        + "   - Gray tile: Letter is not in the word.\n"
+                        + "4. Use the feedback to refine your guesses and find the target word.\n"
+                        + "5. Good luck and have fun!"
+                );
+            } else if (e.getSource() == btn4LetterWords) {
+                openGame(4, 6);
+            } else if (e.getSource() == btn5LetterWords) {
+                openGame(5, 6);
+            } else if (e.getSource() == btn6LetterWords) {
+                openGame(6, 6);
+            } else if (e.getSource() == btnExit) {
+                System.exit(0);
+            }
+        }
+
+        // Method to open the gameframe and pick which category you chose
+        private void openGame(int wordLength, int maxAttempts) {
+            String target = WordStorage.getRandomWord(wordLength);
+            stopMusic(); 
+            GameFrame gameFrame = new GameFrame(wordLength, maxAttempts, target);
+            gameFrame.setVisible(true);
+            dispose();
+        }
+}
