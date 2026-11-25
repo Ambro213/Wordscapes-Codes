@@ -1,0 +1,563 @@
+import java.awt.BasicStroke;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.GradientPaint;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GridLayout;
+import java.awt.Image;
+import java.awt.RenderingHints;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+import javax.imageio.ImageIO;
+import javax.swing.AbstractAction;
+import javax.swing.ActionMap;
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.InputMap;
+import javax.swing.JButton;
+import javax.swing.JComponent;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.KeyStroke;
+import javax.swing.SwingConstants;
+import javax.swing.Timer;
+
+public class GameFrame extends JFrame {
+
+    //Colors for our GameFrame
+    private static final Color BG = new Color(248, 248, 164);
+    private Image backgroundImage;
+    private static final Color TILE_FILLED_BORDER = new Color(120, 124, 126);
+    private static final Color GREEN = new Color(106, 170, 100);
+    private static final Color YELLOW = new Color(201, 180, 88);
+    private static final Color GRAY = new Color(58, 58, 60);
+    private static final Color KEY_DEFAULT = new Color(129, 131, 132);
+    
+    //Variables used in our GameFrame
+    private final int wordLength;
+    private final int maxAttempts;
+    private final String targetWord;
+    private int currentRow = 0;
+    private int currentCol = 0;
+    private boolean gameOver = false;
+    private boolean hintUsed = false;
+    private JLabel[][] tiles;
+    private boolean[][] hintedTiles;
+    private final Map<Character, JButton> keyButtons = new HashMap<>();
+
+    //Timer variables for our GameFrame
+    private static final int STARTING_SECONDS = 300; 
+    private static final int HINT_TIME_PENALTY = 25;
+    private int secondsLeft = STARTING_SECONDS;
+    private Timer countdownTimer;
+    private JLabel timerLabel;
+   
+    //Constructors
+    public GameFrame(int wordLength, int maxAttempts, String targetWord) {
+        this.wordLength = wordLength;
+        this.maxAttempts = maxAttempts;
+        this.targetWord = targetWord;
+        this.hintedTiles = new boolean[maxAttempts][wordLength];
+
+        // The window frame for our GameFrame
+        setTitle("Wordscapes!");
+        setSize(650, 700);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLocationRelativeTo(null);
+
+        try {
+    backgroundImage = ImageIO.read(getClass().getResource("/GFPIC.png"));
+} catch (IOException e) {
+    e.printStackTrace();
+}
+
+        JPanel backgroundPanel = new JPanel(new BorderLayout()) {
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+
+        if (backgroundImage != null) {
+            g.drawImage(backgroundImage, 0, 0, getWidth(), getHeight(), this);
+        }
+    }
+};
+
+setContentPane(backgroundPanel);
+
+
+        //Timer Label
+        timerLabel = new JLabel(formatTime(secondsLeft), SwingConstants.CENTER);
+        timerLabel.setFont(new Font("Arial", Font.BOLD, 24));
+        timerLabel.setForeground(Color.BLACK);
+        timerLabel.setHorizontalAlignment(SwingConstants.CENTER);
+
+        //Exit Button
+        JButton exitButton = new JButton("EXIT");
+        exitButton.setFont(new Font("Arial", Font.BOLD, 14));
+        exitButton.setBackground(Color.RED);
+        exitButton.setForeground(Color.WHITE);
+        exitButton.setFocusPainted(false);
+        exitButton.addActionListener(e -> System.exit(0));
+
+        //Top panels that contains the exit button, timer label, and our hint button
+        JPanel topPanel = new JPanel(new BorderLayout());
+        topPanel.setOpaque(false);
+        topPanel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        topPanel.add(exitButton, BorderLayout.WEST);
+        topPanel.add(timerLabel, BorderLayout.CENTER);
+        topPanel.add(createHintButton(), BorderLayout.EAST);
+        
+         getContentPane().add(topPanel, BorderLayout.NORTH);
+
+         //The tile presented in our GameFrame
+        JPanel panel = buildTileGrid();
+        getContentPane().add(panel, BorderLayout.CENTER);
+
+        //The keyboard
+        JPanel keyboardPanel = buildKeyboard();
+        getContentPane().add(keyboardPanel, BorderLayout.SOUTH);
+
+        setupPhysicalKeyboard();
+
+        startCountdown();
+
+        setVisible(true);
+    }
+    
+
+    
+private void setupPhysicalKeyboard() {
+    InputMap inputMap = getRootPane().getInputMap(
+        JComponent.WHEN_IN_FOCUSED_WINDOW
+    );
+
+    ActionMap actionMap = getRootPane().getActionMap();
+
+    // Letters A-Z
+    for (int i = 0; i < 26; i++) {
+        final char letter = (char) ('A' + i);
+        String actionKey = "type-" + letter;
+
+        inputMap.put(
+            KeyStroke.getKeyStroke(KeyEvent.VK_A + i, 0),
+            actionKey
+        );
+
+        actionMap.put(actionKey, new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                typeLetter(letter);
+            }
+        });
+    }
+
+    // Backspace
+    inputMap.put(
+        KeyStroke.getKeyStroke(KeyEvent.VK_BACK_SPACE, 0),
+        "delete-letter"
+    );
+
+    // Delete
+    inputMap.put(
+        KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0),
+        "delete-letter"
+    );
+
+    actionMap.put("delete-letter", new AbstractAction() {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            deleteLetter();
+        }
+    });
+
+    // Enter
+    inputMap.put(
+        KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0),
+        "submit-guess"
+    );
+
+    actionMap.put("submit-guess", new AbstractAction() {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            submitGuess();
+        }
+    });
+}
+
+
+
+
+
+
+    //Method for building the Tile grids
+    JPanel buildTileGrid() {
+    JPanel grid = new JPanel(new GridLayout(maxAttempts, wordLength, 5, 5));
+    grid.setOpaque(false);
+    grid.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+
+    tiles = new JLabel[maxAttempts][wordLength];
+
+    for (int row = 0; row < maxAttempts; row++) {
+        for (int col = 0; col < wordLength; col++) {
+            JLabel tile = new JLabel("", SwingConstants.CENTER);
+            tile.setPreferredSize(new Dimension(62, 62));
+            tile.setOpaque(true);
+            tile.setBackground(Color.WHITE);
+            tile.setForeground(Color.BLACK);
+            tile.setBorder(BorderFactory.createLineBorder(Color.BLACK, 2));
+            tile.setFont(new Font("Arial", Font.BOLD, 16));
+
+            tiles[row][col] = tile;
+            grid.add(tile);
+        }
+    }
+
+    //Method to wrap the Tile grids centered in the GameFrame
+    JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+    wrapper.setOpaque(false);
+    wrapper.add(grid);
+
+    return wrapper;
+}
+
+    //The method to build the keyboard for our GameFrame
+    private JPanel buildKeyboard() {
+        JPanel panel = new JPanel();
+    panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+    panel.setOpaque(false);
+    panel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
+
+    String[] rows = {
+        "QWERTYUIOP",
+        "ASDFGHJKL",
+        "ZXCVBNM"
+    };
+
+    for (int i = 0; i < rows.length; i++) {
+        JPanel rowPanel = new JPanel(
+            new FlowLayout(FlowLayout.CENTER, 4, 5)
+        );
+        rowPanel.setOpaque(false);
+
+        for (char c : rows[i].toCharArray()) {
+            PixelKeyButton key = new PixelKeyButton(
+                String.valueOf(c), 52, 56
+            );
+
+            key.addActionListener(e -> typeLetter(c));
+            keyButtons.put(c, key);
+            rowPanel.add(key);
+        }
+
+        if (i == 2) {
+            PixelKeyButton backspaceKey =
+                new PixelKeyButton("⌫", 85, 56);
+            backspaceKey.addActionListener(e -> deleteLetter());
+            rowPanel.add(backspaceKey);
+
+            PixelKeyButton enterKey =
+                new PixelKeyButton("ENTER", 85, 56);
+            enterKey.setFont(new Font("Arial", Font.BOLD, 15));
+            enterKey.addActionListener(e -> submitGuess());
+            rowPanel.add(enterKey);
+        }
+
+        panel.add(rowPanel);
+    }
+
+    return panel;
+}
+
+
+  private class PixelKeyButton extends JButton {
+
+    public PixelKeyButton(String text, int width, int height) {
+        super(text);
+
+        setPreferredSize(new Dimension(width, height));
+        setMinimumSize(new Dimension(width, height));
+        setMaximumSize(new Dimension(width, height));
+
+        setFont(new Font("Arial", Font.BOLD, 25));
+        setForeground(Color.WHITE);
+
+        setFocusPainted(false);
+        setBorderPainted(false);
+        setContentAreaFilled(false);
+        setOpaque(false);
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        Graphics2D g2 = (Graphics2D) g.create();
+
+        g2.setRenderingHint(
+            RenderingHints.KEY_ANTIALIASING,
+            RenderingHints.VALUE_ANTIALIAS_ON
+        );
+
+        int w = getWidth();
+        int h = getHeight();
+
+        // Shadow
+        g2.setColor(new Color(15, 43, 105));
+        g2.fillRoundRect(2, 4, w - 4, h - 4, 23, 23);
+
+        // Blue gradient
+        GradientPaint gradient = new GradientPaint(
+            0, 0, new Color(105, 143, 230),
+            0, h, new Color(48, 83, 177)
+        );
+
+        g2.setPaint(gradient);
+        g2.fillRoundRect(0, 0, w - 4, h - 7, 23, 23);
+
+        // Outline
+        g2.setColor(new Color(19, 53, 126));
+        g2.setStroke(new BasicStroke(3.5f));
+        g2.drawRoundRect(1, 1, w - 6, h - 9, 23, 23);
+
+        // Highlight
+        g2.setColor(new Color(255, 255, 255, 100));
+        g2.setStroke(new BasicStroke(2f));
+        g2.drawRoundRect(6, 6, w - 16, h - 20, 18, 18);
+
+        // Button text
+        FontMetrics fm = g2.getFontMetrics(getFont());
+        String text = getText();
+
+        int textX = (w - fm.stringWidth(text)) / 2;
+        int textY = (h - 7 - fm.getHeight()) / 2 + fm.getAscent();
+
+        g2.setFont(getFont());
+
+        g2.setColor(new Color(18, 45, 105));
+
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                if (dx != 0 || dy != 0) {
+                    g2.drawString(text, textX + dx, textY + dy);
+                }
+            }
+        }
+
+        g2.setColor(Color.WHITE);
+        g2.drawString(text, textX, textY);
+
+        g2.dispose();
+    }
+}
+
+    //The method to create the hint button
+    JButton createHintButton() {
+        JButton hintButton = new JButton("HINT");
+        hintButton.setPreferredSize(new Dimension(65, 50));
+        hintButton.setBackground(KEY_DEFAULT);
+        hintButton.setForeground(Color.WHITE);
+        hintButton.setFont(new Font("SANS", Font.BOLD, 12));
+        hintButton.setFocusPainted(false);
+        hintButton.setBorder(BorderFactory.createEmptyBorder());
+        hintButton.addActionListener(e -> useHint());
+
+        return hintButton;
+    }
+
+    //Method to handle the typing of letters inside the tiles 
+    private void typeLetter(char CANTEEN) {
+        if (gameOver) return;
+        if (currentCol < wordLength) {
+            tiles[currentRow][currentCol].setText(String.valueOf(CANTEEN));
+            tiles[currentRow][currentCol].setBorder(BorderFactory.createLineBorder(TILE_FILLED_BORDER, 2));
+            currentCol++;
+        }
+    }
+
+    //The method to handle deleting letters inside the tiles
+    private void deleteLetter() {
+    if (gameOver) return;
+     
+      
+    if (currentCol > 0) {
+        int previousCol = currentCol - 1;
+
+        if (hintedTiles[currentRow][previousCol]) {
+            return;
+        }
+
+        currentCol--;
+
+        tiles[currentRow][currentCol].setText("");
+        tiles[currentRow][currentCol].setBorder(
+                BorderFactory.createLineBorder(Color.BLACK, 2));
+    }
+}
+
+    //The method that handles the guessing of the words typed in by the user
+    private void submitGuess() {
+    if (gameOver) return;
+
+    if (currentCol < wordLength) {
+        return;
+    }
+
+    //The method that handles the coloring of the tiles based on the answers of the user
+    StringBuilder guessBuilder = new StringBuilder();
+
+    for (int col = 0; col < wordLength; col++) {
+        char guessLetter = tiles[currentRow][col].getText().charAt(0);
+        char targetLetter = targetWord.charAt(col);
+        guessBuilder.append(guessLetter);
+
+        if (guessLetter == targetLetter) {
+            tiles[currentRow][col].setBackground(GREEN);
+            tiles[currentRow][col].setForeground(Color.WHITE);
+        } else if (targetWord.indexOf(guessLetter) != -1) {
+            tiles[currentRow][col].setBackground(YELLOW);
+            tiles[currentRow][col].setForeground(Color.WHITE);
+        } else {
+            tiles[currentRow][col].setBackground(GRAY);
+            tiles[currentRow][col].setForeground(Color.WHITE);
+        }
+    }
+
+    //The OptionPane that pops up when the user guesses the word or got the word wrong
+    String guess = guessBuilder.toString();
+
+    if (guess.equals(targetWord)) {
+        gameOver = true;
+        if (countdownTimer != null) {
+            countdownTimer.stop();
+        }
+        int answer = JOptionPane.showConfirmDialog(null, "GOOD JOB! Do you wish to go back to the menu?", "You Win!", JOptionPane.YES_NO_OPTION);
+        if (answer == JOptionPane.YES_OPTION) {
+            goToMenu();
+        } else if (answer == JOptionPane.NO_OPTION) {
+            restartGame();
+        }
+    
+    return;
+    }
+
+    currentRow++;
+    currentCol = 0;
+
+    if (currentRow >= maxAttempts) {
+        gameOver = true;
+        if (countdownTimer != null) {
+            countdownTimer.stop();
+        }
+        int answer = JOptionPane.showConfirmDialog(null, "Game Over! The correct word was: " + targetWord + ". Do you wish to go back to the menu?", "Game Over", JOptionPane.YES_NO_OPTION);
+        if (answer == JOptionPane.YES_OPTION) {
+            goToMenu();
+        } else if (answer == JOptionPane.NO_OPTION) {
+            restartGame();
+        }
+    } 
+}
+
+private void goToMenu() {
+    if (countdownTimer != null) {
+        countdownTimer.stop();
+    }
+    dispose();
+    new MenuFrame().setVisible(true); // adjust to your actual menu class/constructor
+}
+
+
+private void restartGame() {
+    if (countdownTimer != null) {
+        countdownTimer.stop();
+    }
+
+    String newTarget = WordStorage.getRandomWord(wordLength);
+
+    dispose();
+    new GameFrame(wordLength, maxAttempts, newTarget);
+}
+
+
+    //The method for the timer that counts down
+     private String formatTime(int totalSeconds) {
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        return String.format("%02d:%02d", minutes, seconds);
+    }
+
+    private void startCountdown() {
+        countdownTimer = new Timer(1000, e -> {
+            secondsLeft--;
+            timerLabel.setText(formatTime(secondsLeft));
+
+            if (secondsLeft <= 0) {
+                countdownTimer.stop();
+                int answer = JOptionPane.showConfirmDialog(null, "Game Over! The correct word was: " + targetWord + ". Do you wish to go back to the menu?", "Game Over", JOptionPane.YES_NO_OPTION);
+                if (answer == JOptionPane.YES_OPTION) {
+                    goToMenu();
+                } else if (answer == JOptionPane.NO_OPTION) {
+                    restartGame();
+                }
+                gameOver = true;
+                timerLabel.setText("00:00");
+            }
+        });
+        countdownTimer.start();
+    }
+
+    //The OptionPane that pops up when the user used the hint already
+    private void useHint() {
+         
+        if (gameOver) return;
+
+    if (hintUsed) {
+        JOptionPane.showMessageDialog(null, "Hint already used!",
+                "Hint", JOptionPane.INFORMATION_MESSAGE);
+        return;
+    }
+
+    if (currentCol >= wordLength) {
+        JOptionPane.showMessageDialog(null, "No available tile for hint!",
+                "Hint", JOptionPane.INFORMATION_MESSAGE);
+        return;
+    }
+
+    hintUsed = true;
+
+    secondsLeft -= HINT_TIME_PENALTY;
+
+    if (secondsLeft < 0) {
+        secondsLeft = 0;
+    }
+
+    timerLabel.setText(formatTime(secondsLeft));
+
+    char hintLetter = targetWord.charAt(currentCol);
+
+    tiles[currentRow][currentCol].setText(String.valueOf(hintLetter));
+
+    tiles[currentRow][currentCol].setBorder(
+            BorderFactory.createLineBorder(TILE_FILLED_BORDER, 2));
+
+    hintedTiles[currentRow][currentCol] = true;
+
+    currentCol++;
+}
+
+
+
+        
+
+    
+    public static void main(String[] args) {
+        new GameFrame(5, 6, "APPLE");
+    }
+}
